@@ -1,146 +1,181 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <ctype.h>
 
-#define DICT_LEN 7776
-#define DICT_FILE_NAME "diceware_wordlist.txt"
-#define DEF_DELIMITER ' '
-#define DEF_LEN 6
-#define NUM_COLS 2
-#define NUM_ROLLS 5
-#define MIN_ROLL 11111
-#define MAX_ROLL 66666
-#define MAX_ROW_LEN 256
-#define OPTS "d:l:h"
+#include "diceware.h"
 
-typedef struct {
-    int key;
-    char* word;
-} word_t;
+#define OPTS "d:l:f:vh"
 
-int rollDice(void);
-int searchDict(const word_t*, int, int, int);
-word_t* generatePhrase(const word_t*, int);
-void outputPassphrase(const word_t*, char, int);
-void outputHelp(const char*);
-
-int main(int argc, char* argv[]) {
-    int opt;
-    int phraseLength = DEF_LEN;
-    char word[MAX_ROW_LEN];
+int main(int argc, char* argv[])
+{
+    char* filename = DEF_FILE_NAME;
+    int phraseLen = DEF_LEN;
     char delimiter = DEF_DELIMITER;
-    word_t dict[DICT_LEN];
-    FILE* pWordList;
+    bool verbose = false;
+
     srand(time(NULL));
 
+    int opt;
     while ((opt = getopt(argc, argv, OPTS)) != -1) {
         switch (opt) {
             case 'd':
-                if (!isprint(optarg[0])) {
-                    fprintf(stderr, "%s", "[Error] Invalid delimiter entered.\n");
-                    exit(EXIT_FAILURE);
-                }
                 if (strlen(optarg) > 1) {
                     fprintf(stderr, "%s", "[Error] Provide only a single delimitation character.\n");
+                    exit(EXIT_FAILURE);
+                }
+                if (!isprint(optarg[0])) {
+                    fprintf(stderr, "%s", "[Error] Invalid delimiter.\n");
                     exit(EXIT_FAILURE);
                 }
                 delimiter = optarg[0];
                 break;
             case 'l':
-                phraseLength = atoi(optarg);
-                if (phraseLength > DICT_LEN || phraseLength <= 0) {
-                    fprintf(stderr, "[Error] Length must be a positive integer, and less than %d.\n", DICT_LEN + 1);
+                phraseLen = atoi(optarg);
+                if (phraseLen > DICT_LEN || phraseLen <= 0) {
+                    fprintf(stderr, "[Error] Length must be an number between 0 and %d.\n", DICT_LEN);
                     exit(EXIT_FAILURE);
                 }
+                break;
+            case 'f':
+                if (access(optarg, R_OK) != -1) {
+                    filename = (char*) malloc(sizeof(char) * (strlen(optarg) + 1));
+                    strcpy(filename, optarg);
+                } else {
+                    fprintf(stderr, "[Error] File: \"%s\" not found.\n", optarg);
+                    exit(EXIT_FAILURE);
+                }
+                break;
+            case 'v':
+                verbose = true;
                 break;
             case 'h':
                 outputHelp(argv[0]);
                 exit(EXIT_SUCCESS);
             default:
-                outputHelp(argv[0]);
                 exit(EXIT_FAILURE);
         }
     }
 
-    if ((pWordList = fopen(DICT_FILE_NAME, "r")) == NULL) {
-        fprintf(stderr, "%s", "[Error] Couldn't open the word list file.\n");
+    word_t* dict = readWordList(filename);
+    word_t* passphrase = generatePhrase(dict, phraseLen, verbose);
+    
+    if (verbose) {
+        printf("\n%s", "Your passphrase is: ");
+    }
+    outputPassphrase(passphrase, delimiter, phraseLen);
+}
+
+word_t* readWordList(const char* filename)
+{
+    FILE* pWordList;
+    char word[MAX_WORD_LEN];
+    bool readerr = false;
+    word_t* dict = (word_t*) malloc(sizeof(word_t) * DICT_LEN);
+
+    if ((pWordList = fopen(filename, "r")) == NULL) {
+        fprintf(stderr, "%s", "[Error] Failed to open the wordlist file.\n");
         exit(EXIT_FAILURE);
     }
 
-    for (int i = 0; !feof(pWordList); i++) {
-        if (fscanf(pWordList, "%d %s", &dict[i].key, word) == NUM_COLS) {
+    for (size_t i = 0; !feof(pWordList); i++) {
+        if (fscanf(pWordList, "%5d %128s", &dict[i].key, word) == NUM_COLS) {
             if (dict[i].key > MAX_ROLL || dict[i].key < MIN_ROLL) {
-                fprintf(stderr, "%s", "[Error] The word list file appears to contain invalid entries.\n");
-                exit(EXIT_FAILURE);
+                readerr = true;
+                break;
             }
-            dict[i].word = (char*)malloc(sizeof(char) * (strlen(word) + 1));
+
+            dict[i].word = (char*) malloc(sizeof(char) * (strlen(word) + 1));
             strcpy(dict[i].word, word);
+        } else {
+            readerr = true;
+            break;
         }
     }
     fclose(pWordList);
 
-    word_t* passphrase = generatePhrase(dict, phraseLength);
-    outputPassphrase(passphrase, delimiter, phraseLength);
+    if (readerr) {
+        fprintf(stderr, "%s", "[Error] The wordlist file contains invalid entries.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    return dict;
 }
 
-word_t* generatePhrase(const word_t* dict, const int length) {
-    int roll, loc;
-    word_t* passphrase = (word_t*)malloc(sizeof(word_t) * length);
+word_t* generatePhrase(const word_t* dict, const int length, const bool verbose)
+{
+    word_t* passphrase = (word_t*) malloc(sizeof(word_t) * length);
 
-    for (int i = 0; i < length; i++) {
-        roll = rollDice();
-        loc = searchDict(dict, roll, 0, DICT_LEN); // find the location of the word that matches roll
+    for (size_t i = 0; i < length; i++) {
+        int roll = rollDice();
+        size_t word = findWord(dict, roll);  // find the word that corresponds to roll
 
-        if (loc == -1) exit(EXIT_FAILURE);
+        if (word == -1) {
+            exit(EXIT_FAILURE);
+        }
 
-        passphrase[i] = dict[loc];
-        printf("Roll %-6d%d\t%s\n", i + 1, passphrase[i].key, passphrase[i].word);
+        passphrase[i] = dict[word];
+
+        if (verbose) {
+            printf("Roll %-6lu%d\t%s\n", i + 1, passphrase[i].key, passphrase[i].word);
+        }
     }
+
     return passphrase;
 }
 
-int rollDice(void) {
+int rollDice(void)
+{
     int roll[NUM_ROLLS];
-    int concatRolls = 0;
+    int concat = 0;
 
-    for (int i = 0; i < NUM_ROLLS; i++) {
-        roll[i] = rand() % 6 + 1; // Generate a number between one and six
-        concatRolls = (10 * concatRolls) + roll[i]; // Join together each number in roll[]
+    for (size_t i = 0; i < NUM_ROLLS; i++) {
+        roll[i] = rand() % DICE_SIDES + 1;   // Generate a number between one and six
+        concat = (concat * 10) + roll[i];    // Join together each number in roll[]
     }
-    return concatRolls;
+
+    return concat;
 }
 
-// Performs a binary search of the words in the wordlist
-int searchDict(const word_t* dict, const int searchKey, int low, int high) {
-    int middle; 
+size_t findWord(const word_t* dict, const int key)
+{
+    int low = 0;
+    int high = DICT_LEN;
 
     while (low <= high) {
-        middle = (low + high) / 2;
+        int middle = (low + high) / 2;
 
-        if (searchKey == dict[middle].key) 
+        if (key == dict[middle].key) {
             return middle;
-        else if (searchKey < dict[middle].key)
+        } else if (key < dict[middle].key) {
             high = middle - 1;
-        else 
+        } else { 
             low = middle + 1;
+        }
     }
+
     return -1;
 }
 
-void outputPassphrase(const word_t* passphrase, const char delimiter, const int length) {
-    printf("\n%s", "Your passphrase is: ");
-    for (int i = 0; i < length - 1; i++)
+void outputPassphrase(const word_t* passphrase, const char delimiter, const int length)
+{    
+    for (int i = 0; i < length - 1; i++) {
         printf("%s%c", passphrase[i].word, delimiter);
+    }
     printf("%s\n", passphrase[length - 1].word);
 }
 
-void outputHelp(const char* exec) {
-    printf("Usage: %s [OPTIONS]\n\n", exec);
+void outputHelp(const char* exec)
+{
+    printf("Usage: %s [options]\n\n", exec);
     printf("%s", "Options:\n");
     printf("%s", "  -h\t\t\tPrints some help text.\n");
-    printf("%s", "  -d <delimiter>\tSpecify a character with which to separate the words.\n");
-    printf("%s", "  -l <length>\t\tSpecify the length of the passphrase to generate.\n");
+    printf("%s", "  -d <delimiter>\tCharacter to separate the words with.\n");
+    printf("%s", "  -l <length>\t\tThe length of the passphrase.\n");
+    printf("%s", "  -f <file>\t\tPath to the input file.\n");
+    printf("%s", "  -v\t\t\tPrints additional information.\n");
 }
