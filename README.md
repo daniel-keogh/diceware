@@ -6,7 +6,7 @@ C implementation of the [diceware](https://en.wikipedia.org/wiki/Diceware) metho
 
 ```sh
 $ make
-$ ./diceware.o [options]
+$ ./diceware [options]
 ```
 
 ### Options
@@ -22,7 +22,7 @@ $ ./diceware.o [options]
 #### Example
 
 ```sh
-$ ./diceware.o -l 5 -f my_wordlist.txt -v
+$ ./diceware -l 5 -v
 
 Roll 1:  55115      sough
 Roll 2:  31131      gent
