@@ -14,9 +14,9 @@ typedef struct {
     char* word;
 } word_t;
 
-word_t* readWordList(const char*);
-word_t* generatePhrase(const word_t*, int, bool);
+word_t* readWordList(const char* filename);
+word_t* generatePhrase(const word_t* dict, const int length);
 int rollDice(void);
-size_t findWord(const word_t*, int);
+size_t findWord(const word_t* dict, const int key);
 
 #endif

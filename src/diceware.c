@@ -5,6 +5,7 @@
 
 #include "diceware.h"
 
+extern bool verbose;
 extern char _binary_lists_diceware_wordlist_txt_start[];
 
 word_t* readWordList(const char* filename)
@@ -18,7 +19,8 @@ word_t* readWordList(const char* filename)
             fprintf(stderr, "%s", "[Error] Failed to open the wordlist file.\n");
             exit(EXIT_FAILURE);
         }
-    } else {
+    }
+    else {
         size_t len = strlen(_binary_lists_diceware_wordlist_txt_start);
         pWordList = fmemopen(_binary_lists_diceware_wordlist_txt_start, len, "r");
     }
@@ -32,7 +34,8 @@ word_t* readWordList(const char* filename)
 
             dict[i].word = malloc(sizeof(char) * (strlen(word) + 1));
             strcpy(dict[i].word, word);
-        } else {
+        }
+        else {
             fprintf(stderr, "%s", "[Error] The wordlist file contains invalid entries.\n");
             exit(EXIT_FAILURE);
         }
@@ -42,7 +45,7 @@ word_t* readWordList(const char* filename)
     return dict;
 }
 
-word_t* generatePhrase(const word_t* dict, const int length, const bool verbose)
+word_t* generatePhrase(const word_t* dict, const int length)
 {
     word_t* passphrase = malloc(sizeof(word_t) * length);
 
@@ -87,9 +90,11 @@ size_t findWord(const word_t* dict, const int key)
 
         if (key == dict[middle].key) {
             return middle;
-        } else if (key < dict[middle].key) {
+        }
+        else if (key < dict[middle].key) {
             high = middle - 1;
-        } else { 
+        }
+        else {
             low = middle + 1;
         }
     }

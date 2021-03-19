@@ -10,29 +10,41 @@
 #include "diceware.h"
 #include "main.h"
 
+bool verbose = false;
+
 int main(int argc, char* argv[])
 {
     options_t options = {
         .delimiter = DEF_DELIMITER,
         .filename = DEF_FILENAME,
-        .length = DEF_LEN,
-        .verbose = DEF_VERBOSITY
+        .length = DEF_LEN
     };
 
     srand(time(NULL));
 
     parseOpts(argc, argv, &options);
-    
+
     word_t* dict = readWordList(options.filename);
-    word_t* passphrase = generatePhrase(dict, options.length, options.verbose);
+    word_t* passphrase = generatePhrase(dict, options.length);
 
     outputPassphrase(passphrase, options);
 }
 
 void parseOpts(int argc, char* argv[], options_t* options)
 {
+    static struct option cli_options[] = {
+        {"help", no_argument, 0, 'h'},
+        {"verbose", no_argument, 0, 'v'},
+        {"file", required_argument, 0, 'f'},
+        {"length", required_argument, 0, 'l'},
+        {"delimiter", required_argument, 0, 'd'},
+        {0, 0, 0, 0}
+    };
+
     int opt;
-    while ((opt = getopt(argc, argv, OPTS)) != -1) {
+    int optIndex = 0;
+
+    while ((opt = getopt_long(argc, argv, OPTS, cli_options, &optIndex)) != -1) {
         switch (opt) {
             case 'd':
                 if (strlen(optarg) > 1) {
@@ -56,16 +68,17 @@ void parseOpts(int argc, char* argv[], options_t* options)
                 if (access(optarg, R_OK) != -1) {
                     options->filename = malloc(sizeof(char) * (strlen(optarg) + 1));
                     strcpy(options->filename, optarg);
-                } else {
+                }
+                else {
                     fprintf(stderr, "[Error] File: \"%s\" not found.\n", optarg);
                     exit(EXIT_FAILURE);
                 }
                 break;
             case 'v':
-                options->verbose = true;
+                verbose = true;
                 break;
             case 'h':
-                outputHelp(argv[0]);
+                usage(argv[0]);
                 exit(EXIT_SUCCESS);
             default:
                 exit(EXIT_FAILURE);
@@ -74,8 +87,8 @@ void parseOpts(int argc, char* argv[], options_t* options)
 }
 
 void outputPassphrase(const word_t* passphrase, const options_t options)
-{    
-    if (options.verbose) {
+{
+    if (verbose) {
         printf("\n%s", "Your passphrase is: ");
     }
 
@@ -85,13 +98,13 @@ void outputPassphrase(const word_t* passphrase, const options_t options)
     printf("%s\n", passphrase[options.length - 1].word);
 }
 
-void outputHelp(const char* exec)
+void usage(const char* exec)
 {
     printf("Usage: %s [options]\n\n", exec);
     printf("%s", "Options:\n");
-    printf("%s", "  -h\t\t\tPrints some help text.\n");
-    printf("%s", "  -d <delimiter>\tCharacter to separate the words with.\n");
-    printf("%s", "  -l <length>\t\tThe length of the passphrase.\n");
-    printf("%s", "  -f <file>\t\tPath to the input file.\n");
-    printf("%s", "  -v\t\t\tPrints additional information.\n");
+    printf("%s", "  -h, --help\t\t\tPrints some help text.\n");
+    printf("%s", "  -d, --delimiter <delimiter>\tCharacter to separate the words with.\n");
+    printf("%s", "  -l, --length <length>\t\tThe length of the passphrase.\n");
+    printf("%s", "  -f, --file <file>\t\tPath to the input file.\n");
+    printf("%s", "  -v, --verbose\t\t\tPrints additional information.\n");
 }
